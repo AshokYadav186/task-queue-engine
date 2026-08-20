@@ -19,7 +19,7 @@ graph TD
     Client[React Frontend Dashboard] -->|POST /api/jobs | API[Express API Server]
     Client -->|GET /api/jobs & /metrics| API
     API -->|Atomic LPUSH| RedisPending[(Redis: queue:pending)]
-    Worker[Worker Consumer Process] -->|Atomic BLMOVE| RedisProcessing[(Redis: queue:processing)]
+    Worker[Worker Consumer Process] -->|Atomic RPOPLPUSH| RedisProcessing[(Redis: queue:processing)]
     Worker -->|Execute Task| Handlers[Worker Handlers: Email, Image, Report]
     Handlers -->|Success| Complete[Mark COMPLETED & LREM queue:processing]
     Handlers -->|Error & Attempts < 3| RetryQueue[Redis Sorted Set: queue:retry]
@@ -30,7 +30,7 @@ graph TD
 
 ## ⚡ Core Engineering Features
 
-- 🔐 **Atomic Queue Operations**: Uses Redis `BLMOVE` (or `BRPOPLPUSH`) to atomically move tasks from `queue:pending` to `queue:processing`. Prevents job loss if a worker crashes mid-execution.
+- 🔐 **Atomic Queue Operations**: Uses Redis `RPOPLPUSH` to atomically move tasks from `queue:pending` to `queue:processing`. Prevents job loss if a worker crashes mid-execution.
 - ⏳ **Exponential Backoff Retries**: Calculates delay $t = 2^{\text{attempts}} \times 1000\text{ms}$ and schedules retries in a Redis Sorted Set (`queue:retry`) using timestamp scores.
 - ☠️ **Dead-Letter Queue (DLQ)**: Permanently failed tasks ($\ge 3$ attempts) are safely isolated in `queue:dlq` to prevent poison-pill jobs from blocking system execution.
 - 🛠️ **3 Concrete Worker Handlers**:
@@ -103,18 +103,3 @@ docker-compose up --build
    npm install
    npm run dev
    ```
-
----
-
-## 🎯 Interview Deep Dive & Defense Guide
-
-When asked about this project in technical interviews:
-
-### Q1: Why did you use Redis for the task queue instead of a standard SQL database?
-> **Answer**: Redis operates in-memory with single-threaded event loop atomicity. Redis data structures like Lists (`LPUSH`, `BLMOVE`) and Sorted Sets (`ZADD`) allow $O(1)$ enqueue and pop operations without the overhead of SQL row-locking (`SELECT FOR UPDATE`), making it ideal for low-latency task scheduling.
-
-### Q2: How does your worker guarantee zero task loss if a node crashes mid-task?
-> **Answer**: Instead of using non-atomic `LPOP`, the worker executes `BLMOVE queue:pending queue:processing LEFT RIGHT`. This atomically pops the item from pending AND pushes it to processing in a single operation. If the worker process dies mid-task, the job remains in `queue:processing` where an orphaned-job watchdog process can recover it.
-
-### Q3: How is exponential backoff implemented using Redis Sorted Sets?
-> **Answer**: When a task fails, we increment its attempt counter and compute the backoff time $t = \text{now} + 2^{\text{attempts}} \times 1000\text{ms}$. We store the task ID in Redis Sorted Set `queue:retry` with score = $t$. A background scheduler process periodically calls `ZRANGEBYSCORE queue:retry 0 <current_timestamp>` to atomically pull and re-queue due tasks back into `queue:pending`.
