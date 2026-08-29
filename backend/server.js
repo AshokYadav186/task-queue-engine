@@ -3,7 +3,18 @@ const cors = require('cors');
 require('dotenv').config();
 
 const redis = require('./config/redis');
-const TaskQueueConsumer = require('../worker/queue/taskQueue');
+
+// Attempt to load TaskQueueConsumer from local backend/worker or parent worker
+let TaskQueueConsumer;
+try {
+  TaskQueueConsumer = require('./worker/queue/taskQueue');
+} catch (e1) {
+  try {
+    TaskQueueConsumer = require('../worker/queue/taskQueue');
+  } catch (e2) {
+    console.warn('TaskQueueConsumer not found, skipping embedded worker:', e2.message);
+  }
+}
 
 const jobRoutes = require('./routes/jobRoutes');
 const metricRoutes = require('./routes/metricRoutes');
@@ -24,13 +35,15 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Task Queue API Server running on port ${PORT}`);
+  console.log(`⚡ Task Queue API Server running on port ${PORT}`);
   
-  try {
-    console.log(`⚡ Starting Worker Queue Consumer on Port ${PORT}...`);
-    const consumer = new TaskQueueConsumer(redis);
-    consumer.start();
-  } catch (err) {
-    console.error('Failed to start worker consumer:', err.message);
+  if (TaskQueueConsumer) {
+    try {
+      console.log(`⚡ Starting Worker Queue Consumer on Port ${PORT}...`);
+      const consumer = new TaskQueueConsumer(redis);
+      consumer.start();
+    } catch (err) {
+      console.error('Failed to start worker consumer:', err.message);
+    }
   }
 });
