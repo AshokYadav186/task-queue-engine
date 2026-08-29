@@ -10,7 +10,7 @@ import TaskTable from './components/TaskTable';
 import TaskDetailsModal from './components/TaskDetailsModal';
 import DispatchTaskModal from './components/DispatchTaskModal';
 
-const API_BASE_URL = 'http://localhost:5001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 export default function App() {
   const [metrics, setMetrics] = useState(null);

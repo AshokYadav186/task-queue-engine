@@ -24,13 +24,31 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Routes
-app.use('/api/jobs', jobRoutes);
-app.use('/api/metrics', metricRoutes);
+// Root API status endpoint
+app.get('/', (req, res) => {
+  res.json({
+    service: 'Distributed Task Queue & Worker Engine API',
+    status: 'ONLINE',
+    version: '1.4.0',
+    endpoints: {
+      health: '/health',
+      jobs: '/api/jobs',
+      metrics: '/api/metrics',
+      dlqRetry: 'POST /api/jobs/dlq/retry',
+      clearCompleted: 'POST /api/jobs/clear',
+    },
+    documentation: 'https://github.com/AshokYadav186/task-queue-engine',
+    timestamp: new Date().toISOString(),
+  });
+});
 
 app.get('/health', (req, res) => {
   res.json({ status: 'UP', service: 'Task Queue API Server', timestamp: new Date().toISOString() });
 });
+
+// Routes
+app.use('/api/jobs', jobRoutes);
+app.use('/api/metrics', metricRoutes);
 
 const PORT = process.env.PORT || 5001;
 
